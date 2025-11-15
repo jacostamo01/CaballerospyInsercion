@@ -1,4 +1,4 @@
-# main.py - Microservicio de INSERCIÓN (versión con debug de errores)
+# main.py - Microservicio de INSERCIÓN (versión corregida HttpUrl)
 import os
 
 from fastapi import FastAPI, HTTPException
@@ -15,7 +15,6 @@ MONGO_DB = os.getenv("MONGO_DB", "caballerosdb")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "caballeros")
 
 if not MONGO_URI:
-    # Esto va a aparecer en los logs de Render si falta la URI
     raise RuntimeError("La variable de entorno MONGO_URI no está configurada")
 
 client = MongoClient(MONGO_URI)
@@ -48,7 +47,7 @@ def root():
 @app.post("/caballeros", status_code=201)
 def insertar_caballero(caballero: CaballeroIn):
     try:
-        # Validación de unicidad por nombre (puedes quitarla si quieres)
+        # Validación de unicidad por nombre
         existente = caballeros_col.find_one({"nombre": caballero.nombre})
         if existente:
             raise HTTPException(
@@ -56,7 +55,14 @@ def insertar_caballero(caballero: CaballeroIn):
                 detail="Ya existe un caballero con ese nombre",
             )
 
-        result = caballeros_col.insert_one(caballero.dict())
+        # 🔴 AQUÍ ESTABA EL PROBLEMA:
+        # caballero.dict() deja urlImagen como HttpUrl (objeto Pydantic)
+        # 🔧 SOLUCIÓN: convertir a tipos "simples" de Python
+        doc = caballero.model_dump()
+        doc["urlImagen"] = str(caballero.urlImagen)  # forzamos a str
+
+        result = caballeros_col.insert_one(doc)
+
         return {
             "ok": True,
             "inserted_id": str(result.inserted_id),
@@ -64,10 +70,8 @@ def insertar_caballero(caballero: CaballeroIn):
         }
 
     except HTTPException:
-        # Re-lanzamos errores HTTP tal cual
         raise
     except PyMongoError as e:
-        # Aquí devolvemos el error real de MongoDB para que no quede oculto
         raise HTTPException(
             status_code=500,
             detail=f"Error en MongoDB: {e}"
