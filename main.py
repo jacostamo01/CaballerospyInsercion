@@ -55,9 +55,6 @@ def insertar_caballero(caballero: CaballeroIn):
                 detail="Ya existe un caballero con ese nombre",
             )
 
-        # 🔴 AQUÍ ESTABA EL PROBLEMA:
-        # caballero.dict() deja urlImagen como HttpUrl (objeto Pydantic)
-        # 🔧 SOLUCIÓN: convertir a tipos "simples" de Python
         doc = caballero.model_dump()
         doc["urlImagen"] = str(caballero.urlImagen)  # forzamos a str
 
