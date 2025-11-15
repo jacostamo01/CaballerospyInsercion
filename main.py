@@ -1,4 +1,4 @@
-# main.py - Microservicio de INSERCIÓN
+# main.py - Microservicio de INSERCIÓN (versión con debug de errores)
 import os
 
 from fastapi import FastAPI, HTTPException
@@ -6,12 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl, conint, confloat
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB", "caballerosdb")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "caballeros")
+
+if not MONGO_URI:
+    # Esto va a aparecer en los logs de Render si falta la URI
+    raise RuntimeError("La variable de entorno MONGO_URI no está configurada")
 
 client = MongoClient(MONGO_URI)
 db = client[MONGO_DB]
@@ -35,27 +40,35 @@ class CaballeroIn(BaseModel):
     altura: confloat(ge=0.5, le=3.0)
 
 
-@app.post("/caballerosI", status_code=201)
-def insertar_caballero(caballero: CaballeroIn):
-    """
-    POST /caballeros
-    Body JSON:
-    {
-      "nombre": "...",
-      "constelacion": "...",
-      "edad": 20,
-      "urlImagen": "https://...",
-      "altura": 1.80
-    }
-    """
-    # Evitar duplicados por nombre (puedes quitar esto si no quieres restricción)
-    existente = caballeros_col.find_one({"nombre": caballero.nombre})
-    if existente:
-        raise HTTPException(status_code=409, detail="Ya existe un caballero con ese nombre")
+@app.get("/")
+def root():
+    return {"mensaje": "Microservicio de inserción activo. Usa POST /caballeros"}
 
-    result = caballeros_col.insert_one(caballero.dict())
-    return {
-        "ok": True,
-        "inserted_id": str(result.inserted_id),
-        "mensaje": "Caballero insertado correctamente",
-    }
+
+@app.post("/caballeros", status_code=201)
+def insertar_caballero(caballero: CaballeroIn):
+    try:
+        # Validación de unicidad por nombre (puedes quitarla si quieres)
+        existente = caballeros_col.find_one({"nombre": caballero.nombre})
+        if existente:
+            raise HTTPException(
+                status_code=409,
+                detail="Ya existe un caballero con ese nombre",
+            )
+
+        result = caballeros_col.insert_one(caballero.dict())
+        return {
+            "ok": True,
+            "inserted_id": str(result.inserted_id),
+            "mensaje": "Caballero insertado correctamente",
+        }
+
+    except HTTPException:
+        # Re-lanzamos errores HTTP tal cual
+        raise
+    except PyMongoError as e:
+        # Aquí devolvemos el error real de MongoDB para que no quede oculto
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en MongoDB: {e}"
+        )
