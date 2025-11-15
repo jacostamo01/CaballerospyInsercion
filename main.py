@@ -35,7 +35,7 @@ class CaballeroIn(BaseModel):
     altura: confloat(ge=0.5, le=3.0)
 
 
-@app.post("/caballeros", status_code=201)
+@app.post("/caballerosI", status_code=201)
 def insertar_caballero(caballero: CaballeroIn):
     """
     POST /caballeros
